@@ -13,6 +13,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Collections;
 using Newtonsoft.Json;
+using System.IO;
+
 namespace KingOfExplosionsServer
 {
     public partial class Form1 : Form
@@ -32,7 +34,9 @@ namespace KingOfExplosionsServer
         Dictionary<string, int> map = new Dictionary<string, int>();
 
         const int baseL = 50, N = 10;
-        int[][] arr = new int[N][];
+        int[,] arr = new int[N,N];
+        //Box[,] arrBox = new Box[N, N];
+        //Prop[,] arrProp = new Prop[N, N];
 
         private void button1_Click(object sender, EventArgs e)
         {
@@ -137,58 +141,67 @@ namespace KingOfExplosionsServer
         {
             switch (data.Action) 
             {
+                case "WALK":
+                    //if (cnaWalk(data))
+                    //{
+                    //    SendAll("J" + json, data.User);
+                    //}
+                    break;
                 case "MOVE":
                     //string json = JsonConvert.SerializeObject(data);
-                    SendRoom("J"+json, data.User);
+                    if (cnaWalk(data)) SendAll("J" + json);
                     break;
 
             }
             
         }
 
-        //private bool cnaWalk(int x, int y)
-        //{
-        //    for (int i = y / 50; i < Math.Min(y / 50 + 2, N); i++)
-        //    {
-        //        for (int j = x / 50; j < Math.Min(x / 50 + 2, N); j++)
-        //        {
-        //            if (arr[i][j] == 1 || arr[i][j] == 2)
-        //            {
-        //                int xW = j * baseL, yW = i * baseL;
-        //                if (x > xW && x < xW + 50 && y > yW && y < yW + 50) return false;
-        //                if (x > xW && x < xW + 50 && y + 40 > yW && y + 40 < yW + 50) return false;
-        //                if (x + 40 > xW && x + 40 < xW + 50 && y > yW && y < yW + 50) return false;
-        //                if (x + 40 > xW && x + 40 < xW + 50 && y + 40 > yW && y + 40 < yW + 50) return false;
-        //            }
-        //        }
-        //    }
-        //    int r = (y + 20) / 50, c = (x + 20) / 50;
-        //    if (arr[r][c] >= 3)
-        //    {
-        //        Prop prop = arrProp[r, c];
-        //        panel1.Controls.Remove(prop.Pc);
-        //        int type = prop.type;
-        //        switch (prop.type)
-        //        {
-        //            case 3:
-        //                runningSpeedRatio = prop.ratio;
-        //                reciprocal(70, type);
-        //                break;
-        //            case 4:
+        private bool cnaWalk(DataGame data)
+        {
+            int x = data.Position.Item1, y = data.Position.Item2;
+            int basePL = baseL - 10;
+            for (int i = y / baseL; i < Math.Min(y / baseL + 2, N); i++)
+            {
+                for (int j = x / baseL; j < Math.Min(x / baseL + 2, N); j++)
+                {
+                    if (arr[i,j] == 1 || arr[i,j] == 2)
+                    {
+                        //listBox1.Items.Add("canW");
+                        int xW = j * baseL, yW = i * baseL;
+                        if (x > xW && x < xW + baseL && y > yW && y < yW + baseL) return false;
+                        if (x > xW && x < xW + baseL && y + basePL > yW && y + basePL < yW + baseL) return false;
+                        if (x + basePL > xW && x + basePL < xW + baseL && y > yW && y < yW + baseL) return false;
+                        if (x + basePL > xW && x + basePL < xW + baseL && y + basePL > yW && y + basePL < yW + baseL) return false;
+                    }
+                }
+            }
+            //int r = (y + 20) / baseL, c = (x + 20) / baseL;
+            //if (arr[r][c] >= 3)
+            //{
+            //    Prop prop = arrProp[r, c];
+            //    panel1.Controls.Remove(prop.Pc);
+            //    int type = prop.type;
+            //    switch (prop.type)
+            //    {
+            //        case 3:
+            //            runningSpeedRatio = prop.ratio;
+            //            reciprocal(70, type);
+            //            break;
+            //        case 4:
 
-        //                break;
-        //            case 5:
-        //                walking = false;
-        //                reciprocal(15, type);
-        //                break;
-        //            case 6:
+            //            break;
+            //        case 5:
+            //            walking = false;
+            //            reciprocal(15, type);
+            //            break;
+            //        case 6:
 
-        //                break;
-        //        }
-        //        arr[r][c] = 0;
-        //    }
-        //    return true;
-        //}
+            //            break;
+            //    }
+            //    arr[r][c] = 0;
+            //}
+            return true;
+        }
 
 
         //建立線上名單
@@ -226,6 +239,26 @@ namespace KingOfExplosionsServer
             }
 
         }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            if (File.Exists(path + "Terrain.txt"))
+            {
+                using (StreamReader sr = new StreamReader(path + "Terrain.txt"))
+                {
+                    int i = 0;
+                    string line = "";
+                    while ((line = sr.ReadLine()) != null)
+                    {
+                        for (int j = 0; j < line.Length; j++) arr[i,j] = line[j] - '0';
+                        i++;
+                        //listBox2.Items.Add(line);
+                    }
+
+                }
+            }
+        }
+
         //傳送訊息給所有的線上客戶
         private void SendAll(string Str)
         {
