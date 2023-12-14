@@ -12,16 +12,17 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Collections;
-
+using Newtonsoft.Json;
 namespace KingOfExplosionsServer
 {
     public partial class Form1 : Form
     {
         public Form1()
         {
+            path = path.Substring(0, path.IndexOf("bin"));
             InitializeComponent();
         }
-
+        private string path = System.Environment.CurrentDirectory;
         TcpListener Server;             //伺服端網路監聽器(相當於電話總機)
         Socket Client;                  //給客戶用的連線物件(相當於電話分機)
         Thread Th_Svr;                  //伺服器監聽用執行緒(電話總機開放中)
@@ -29,7 +30,9 @@ namespace KingOfExplosionsServer
         Hashtable HT = new Hashtable(); //客戶名稱與通訊物件的集合(雜湊表)(key:Name, Socket)
         Dictionary<string, List<string>> hashMap = new Dictionary<string, List<string>>();
         Dictionary<string, int> map = new Dictionary<string, int>();
-        Dictionary<string, List<int>> scoreMap = new Dictionary<string, List<int>>();
+
+        const int baseL = 50, N = 10;
+        int[][] arr = new int[N][];
 
         private void button1_Click(object sender, EventArgs e)
         {
@@ -71,6 +74,7 @@ namespace KingOfExplosionsServer
                     listBox2.Items.Add(Msg);
                     string Cmd = Msg.Substring(0, 1);                     //取出命令碼 (第一個字)
                     string Str = Msg.Substring(1);                        //取出命令碼之後的訊息
+
                     switch (Cmd)                                          //依據命令碼執行功能
                     {
                         case "0":                    //有新使用者上線：新增使用者到名單中
@@ -84,7 +88,7 @@ namespace KingOfExplosionsServer
                             }
                             HT.Add(Str, Sck);        //連線加入雜湊表，Key:使用者，Value:連線物件(Socket)
                             listBox1.Items.Add(Str); //加入上線者名單
-                            SendAll(OnlineList());   //將目前上線人名單回傳剛剛登入的人(包含他自己) 
+                            //SendAll(OnlineList());   //將目前上線人名單回傳剛剛登入的人(包含他自己) 
                             break;
 
                         case "9":
@@ -106,27 +110,14 @@ namespace KingOfExplosionsServer
                             Th.Abort();                 //結束此客戶的監聽執行緒
                             break;
                         case "1":                       //使用者傳送訊息給所有人
-                            if (Str[0] == 'A')
-                            {
-                                map = new Dictionary<string, int>();
-                                scoreMap = new Dictionary<string, List<int>>();
-                            }
                             SendAll(Msg);               //廣播訊息
                             break;
-                        case "C":                       //使用者創建或加入房間
-                            string[] tmp = Str.Split('|');
-                            if (!hashMap.ContainsKey(tmp[0])) hashMap[tmp[0]] = new List<string>();
-                            hashMap[tmp[0]].Add(tmp[1]);
-                            string allUser = "";
-                            foreach (string user in hashMap[tmp[0]])
-                            {
-                                allUser += user + " ";
-                            }
-                            SendRoom("C" + allUser, tmp[0]);
 
-                            break;
                         case "J":
-
+                            listBox2.Items.Add(Str);
+                            DataGame data = JsonConvert.DeserializeObject<DataGame>(Str);
+                            GameAction(data, Str);
+                            break;
                         default:                        //使用者傳送私密訊息
 
                             string[] C = Str.Split('|');//切開訊息與收件者
@@ -140,6 +131,66 @@ namespace KingOfExplosionsServer
                 }
             }
         }
+
+
+        private void GameAction(DataGame data, string json) 
+        {
+            switch (data.Action) 
+            {
+                case "MOVE":
+                    //string json = JsonConvert.SerializeObject(data);
+                    SendRoom("J"+json, data.User);
+                    break;
+
+            }
+            
+        }
+
+        //private bool cnaWalk(int x, int y)
+        //{
+        //    for (int i = y / 50; i < Math.Min(y / 50 + 2, N); i++)
+        //    {
+        //        for (int j = x / 50; j < Math.Min(x / 50 + 2, N); j++)
+        //        {
+        //            if (arr[i][j] == 1 || arr[i][j] == 2)
+        //            {
+        //                int xW = j * baseL, yW = i * baseL;
+        //                if (x > xW && x < xW + 50 && y > yW && y < yW + 50) return false;
+        //                if (x > xW && x < xW + 50 && y + 40 > yW && y + 40 < yW + 50) return false;
+        //                if (x + 40 > xW && x + 40 < xW + 50 && y > yW && y < yW + 50) return false;
+        //                if (x + 40 > xW && x + 40 < xW + 50 && y + 40 > yW && y + 40 < yW + 50) return false;
+        //            }
+        //        }
+        //    }
+        //    int r = (y + 20) / 50, c = (x + 20) / 50;
+        //    if (arr[r][c] >= 3)
+        //    {
+        //        Prop prop = arrProp[r, c];
+        //        panel1.Controls.Remove(prop.Pc);
+        //        int type = prop.type;
+        //        switch (prop.type)
+        //        {
+        //            case 3:
+        //                runningSpeedRatio = prop.ratio;
+        //                reciprocal(70, type);
+        //                break;
+        //            case 4:
+
+        //                break;
+        //            case 5:
+        //                walking = false;
+        //                reciprocal(15, type);
+        //                break;
+        //            case 6:
+
+        //                break;
+        //        }
+        //        arr[r][c] = 0;
+        //    }
+        //    return true;
+        //}
+
+
         //建立線上名單
         private string OnlineList()
         {
@@ -156,15 +207,7 @@ namespace KingOfExplosionsServer
             return L;
         }
         //傳送訊息給指定的客戶
-        private void SendRoom(string Str, string roomName)
-        {
-            byte[] B = Encoding.Default.GetBytes(Str);
-            foreach (string user in hashMap[roomName])
-            {
-                Socket Sck = (Socket)HT[user];              //取出發送對象User的通訊物件
-                Sck.Send(B, 0, B.Length, SocketFlags.None); //發送訊息
-            }
-        }
+
         //傳送訊息給指定的客戶
         private void SendTo(string Str, string User)
         {
@@ -173,11 +216,25 @@ namespace KingOfExplosionsServer
             Sck.Send(B, 0, B.Length, SocketFlags.None); //發送訊息
         }
         //傳送訊息給所有的線上客戶
+        private void SendRoom(string Str, string user)
+        {
+            byte[] B = Encoding.Default.GetBytes(Str);   //訊息轉譯為Byte陣列
+            foreach (Socket s in HT.Values)              //HT雜湊表內所有的Socket
+            {
+                if (user != HT.Keys.ToString())
+                    s.Send(B, 0, B.Length, SocketFlags.None);//傳送資料
+            }
+
+        }
+        //傳送訊息給所有的線上客戶
         private void SendAll(string Str)
         {
             byte[] B = Encoding.Default.GetBytes(Str);   //訊息轉譯為Byte陣列
             foreach (Socket s in HT.Values)              //HT雜湊表內所有的Socket
+            {
                 s.Send(B, 0, B.Length, SocketFlags.None);//傳送資料
+            }
+                
         }
     }
 }
