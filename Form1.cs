@@ -32,13 +32,26 @@ namespace KingOfExplosionsServer
         Hashtable HT = new Hashtable(); //客戶名稱與通訊物件的集合(雜湊表)(key:Name, Socket)
         Dictionary<string, List<string>> hashMap = new Dictionary<string, List<string>>();
         Dictionary<string, int> map = new Dictionary<string, int>();
-
+        Tool toolNumber = new Tool();
+        int [] heart = { 3,3,3,3};
         const int baseL = 50, N = 10;
         int[,] arr = new int[N,N];
         //Box[,] arrBox = new Box[N, N];
-        //Prop[,] arrProp = new Prop[N, N];
+        int[,] arrProp = new int[N, N];
+
+        Dictionary<int, Tuple<int, int>> mapPlay = new Dictionary<int, Tuple<int, int>>();
 
         private void button1_Click(object sender, EventArgs e)
+        {
+            //忽略跨執行緒處理的錯誤(允許跨執行緒存取變數)
+            CheckForIllegalCrossThreadCalls = false;
+            Th_Svr = new Thread(ServerSub);     //宣告監聽執行緒(副程式ServerSub)
+            Th_Svr.IsBackground = true;         //設定為背景執行緒
+            Th_Svr.Start();                     //啟動監聽執行緒
+            button1.Enabled = false;            //讓按鍵無法使用(不能重複啟動伺服器) 
+        }
+
+        private void startServer()
         {
             //忽略跨執行緒處理的錯誤(允許跨執行緒存取變數)
             CheckForIllegalCrossThreadCalls = false;
@@ -75,21 +88,21 @@ namespace KingOfExplosionsServer
                     byte[] B = new byte[1023];   //建立接收資料用的陣列，長度須大於可能的訊息
                     int inLen = Sck.Receive(B);  //接收網路資訊(byte陣列)
                     string Msg = Encoding.Default.GetString(B, 0, inLen); //翻譯實際訊息(長度inLen)
-                    listBox2.Items.Add(Msg);
+                    //listBox2.Items.Add(Msg);
                     string Cmd = Msg.Substring(0, 1);                     //取出命令碼 (第一個字)
                     string Str = Msg.Substring(1);                        //取出命令碼之後的訊息
 
                     switch (Cmd)                                          //依據命令碼執行功能
                     {
                         case "0":                    //有新使用者上線：新增使用者到名單中
-                            if (listBox1.Items.IndexOf(Str) >= 0)
-                            {
-                                //listBox2.Items.Add("重複:" + Str);
-                                byte[] R = Encoding.Default.GetBytes("R" + "使用者名稱重複");
-                                Sck.Send(R, 0, R.Length, SocketFlags.None);
-                                Th.Abort();
-                                break;
-                            }
+                            //if (listBox1.Items.IndexOf(Str) >= 0)
+                            //{
+                            //    //listBox2.Items.Add("重複:" + Str);
+                            //    byte[] R = Encoding.Default.GetBytes("R" + "使用者名稱重複");
+                            //    Sck.Send(R, 0, R.Length, SocketFlags.None);
+                            //    Th.Abort();
+                            //    break;
+                            //}
                             HT.Add(Str, Sck);        //連線加入雜湊表，Key:使用者，Value:連線物件(Socket)
                             listBox1.Items.Add(Str); //加入上線者名單
                             //SendAll(OnlineList());   //將目前上線人名單回傳剛剛登入的人(包含他自己) 
@@ -118,14 +131,13 @@ namespace KingOfExplosionsServer
                             break;
 
                         case "J":
-                            listBox2.Items.Add(Str);
                             DataGame data = JsonConvert.DeserializeObject<DataGame>(Str);
                             GameAction(data, Str);
                             break;
                         default:                        //使用者傳送私密訊息
 
-                            string[] C = Str.Split('|');//切開訊息與收件者
-                            SendTo(Cmd + C[0], C[1]);   //C[0]是訊息，C[1]是收件者
+                            //string[] C = Str.Split('|');//切開訊息與收件者
+                            //SendTo(Cmd + C[0], C[1]);   //C[0]是訊息，C[1]是收件者
                             break;
                     }
                 }
@@ -141,32 +153,83 @@ namespace KingOfExplosionsServer
         {
             switch (data.Action) 
             {
-                case "WALK":
-                    //if (cnaWalk(data))
-                    //{
-                    //    SendAll("J" + json, data.User);
-                    //}
+                case "BOMB":
+                    //listBox2.Items.Add(json);
+                    //reciprocal(25, new Tuple<int, DataGame>(2, data));
+                    break;
+                case "DROP":
+                    data.numberBomb = toolNumber.getNumber();
+                    json = JsonConvert.SerializeObject(data);
+                    Bomb bomb = new Bomb(data.Position.Item1, data.Position.Item2, data.numberBomb, data.UserNumber);
+                    SendAll("J" + json);
+                    bomb.reciprocal(25);
+                    bomb.Exploded += CheckBom;
                     break;
                 case "MOVE":
                     //string json = JsonConvert.SerializeObject(data);
-                    if (cnaWalk(data)) SendAll("J" + json);
+                    if (canWalk(data)) SendAll("J" + json);
                     break;
 
             }
             
         }
 
-        private bool cnaWalk(DataGame data)
+        int[] Probability = { 0 , 3, 3, 5, 5 };
+        int getProp() 
+        {
+            Random random = new Random();
+            int num = random.Next(Probability.Length);
+            Console.WriteLine(num);
+            return Probability[num];
+        }
+
+        private void CheckBom(object sender, EventArgs e)
+        {
+            Bomb bomb = (Bomb)sender;
+            int x = bomb.X, y = bomb.Y;
+            x = (x + 20) / 50;
+            y = (y + 20) / 50;
+            List<DataBomb> list = new List<DataBomb>();
+            int[] dir = new int[] { 0,0, 1, 0, -1, 0 };
+            for (int d = 0; d < dir.Length - 1; d++)
+            {
+                int r = y + dir[d], c = x + dir[d + 1];
+                if (r < 0 || c < 0 || r >= N || c >= N) continue;
+                if (arr[r,c] == 2)
+                {
+                    int type = getProp();
+                    arr[r, c] = type;
+                    DataBomb data = new DataBomb("BOMB", new Tuple<int, int>(r, c), type);
+                    list.Add(data);
+                }
+                foreach (var kvp in mapPlay)
+                {
+                    var value = kvp.Value;
+                    if (value.Item1 == r && value.Item2 == c) 
+                    {
+                        Attack attack = new Attack("ACTTACK", kvp.Key, heart[kvp.Key - 1]--);
+                        SendAll("H" + JsonConvert.SerializeObject(attack));
+                    }
+                }
+            }
+            string json = JsonConvert.SerializeObject(list);
+            SendAll("D" + bomb.numberBomb.ToString() + " " + json);
+
+
+            //string json = JsonConvert.SerializeObject(list);
+            //SendAll("D" +dataGame.numberBomb.ToString() +"|"+ json);
+        }
+
+        private bool canWalk(DataGame data)
         {
             int x = data.Position.Item1, y = data.Position.Item2;
-            int basePL = baseL - 10;
+            int basePL = baseL-15;
             for (int i = y / baseL; i < Math.Min(y / baseL + 2, N); i++)
             {
                 for (int j = x / baseL; j < Math.Min(x / baseL + 2, N); j++)
                 {
                     if (arr[i,j] == 1 || arr[i,j] == 2)
                     {
-                        //listBox1.Items.Add("canW");
                         int xW = j * baseL, yW = i * baseL;
                         if (x > xW && x < xW + baseL && y > yW && y < yW + baseL) return false;
                         if (x > xW && x < xW + baseL && y + basePL > yW && y + basePL < yW + baseL) return false;
@@ -175,31 +238,39 @@ namespace KingOfExplosionsServer
                     }
                 }
             }
-            //int r = (y + 20) / baseL, c = (x + 20) / baseL;
-            //if (arr[r][c] >= 3)
-            //{
-            //    Prop prop = arrProp[r, c];
-            //    panel1.Controls.Remove(prop.Pc);
-            //    int type = prop.type;
-            //    switch (prop.type)
-            //    {
-            //        case 3:
-            //            runningSpeedRatio = prop.ratio;
-            //            reciprocal(70, type);
-            //            break;
-            //        case 4:
+            int r = (y + 20) / baseL, c = (x + 20) / baseL;
+            if (arr[r,c] >= 3)
+            {
+                int type = arr[r, c];
+                data.TypeProp = type;
+                data.Action = "PORPSOVER";
+                string jsonS = JsonConvert.SerializeObject(data);
+                Tool tool = new Tool(jsonS);
+                tool.Exploded += SendProp;
+                
+                switch (type)
+                {
+                    case 3:
+                        tool.reciprocal(70);
+                        break;
+                    case 4:
 
-            //            break;
-            //        case 5:
-            //            walking = false;
-            //            reciprocal(15, type);
-            //            break;
-            //        case 6:
+                        break;
+                    case 5:
+                        tool.reciprocal(15);
+                        break;
+                    case 6:
 
-            //            break;
-            //    }
-            //    arr[r][c] = 0;
-            //}
+                        break;
+                }
+                arr[r,c] = 0;
+                data.Action = "PROP";
+                data.Position = new Tuple<int, int>(r, c);
+                string json = JsonConvert.SerializeObject(data);
+                listBox2.Items.Add("PORPSOVER: "+ json);
+                SendAll("J" +  json);
+            }
+            mapPlay[data.UserNumber] = new Tuple<int, int>(r, c);
             return true;
         }
 
@@ -220,18 +291,25 @@ namespace KingOfExplosionsServer
             return L;
         }
         //傳送訊息給指定的客戶
-
+        private void SendProp(object sender, EventArgs e)
+        {
+            Tool tool = (Tool)sender;
+            DataGame data = JsonConvert.DeserializeObject<DataGame>(tool.str);
+            byte[] B = Encoding.Default.GetBytes("J" + tool.str+ "|");  //訊息轉譯為byte陣列
+            Socket Sck = (Socket)HT[data.UserNumber.ToString()];              //取出發送對象User的通訊物件
+            Sck.Send(B, 0, B.Length, SocketFlags.None); //發送訊息
+        }
         //傳送訊息給指定的客戶
         private void SendTo(string Str, string User)
         {
-            byte[] B = Encoding.Default.GetBytes(Str);  //訊息轉譯為byte陣列
+            byte[] B = Encoding.Default.GetBytes(Str + "|");  //訊息轉譯為byte陣列
             Socket Sck = (Socket)HT[User];              //取出發送對象User的通訊物件
             Sck.Send(B, 0, B.Length, SocketFlags.None); //發送訊息
         }
         //傳送訊息給所有的線上客戶
         private void SendRoom(string Str, string user)
         {
-            byte[] B = Encoding.Default.GetBytes(Str);   //訊息轉譯為Byte陣列
+            byte[] B = Encoding.Default.GetBytes(Str+ "|");   //訊息轉譯為Byte陣列
             foreach (Socket s in HT.Values)              //HT雜湊表內所有的Socket
             {
                 if (user != HT.Keys.ToString())
@@ -252,22 +330,75 @@ namespace KingOfExplosionsServer
                     {
                         for (int j = 0; j < line.Length; j++) arr[i,j] = line[j] - '0';
                         i++;
-                        //listBox2.Items.Add(line);
                     }
 
                 }
             }
+
+            startServer();
         }
 
         //傳送訊息給所有的線上客戶
         private void SendAll(string Str)
         {
-            byte[] B = Encoding.Default.GetBytes(Str);   //訊息轉譯為Byte陣列
+            byte[] B = Encoding.Default.GetBytes(Str + "|");   //訊息轉譯為Byte陣列
             foreach (Socket s in HT.Values)              //HT雜湊表內所有的Socket
             {
                 s.Send(B, 0, B.Length, SocketFlags.None);//傳送資料
             }
                 
         }
+
+        //int V;
+        //private System.Threading.Timer timer;
+        //private object lockObject = new object();
+        //private bool isSendPending = false;
+
+        //private void reciprocal(int t, Tuple<int, DataGame> obj)
+        //{
+        //    V = t;
+        //    timer = new System.Threading.Timer(CountDown, obj, 0, 100);
+        //}
+
+        //private void CountDown(object state)
+        //{
+        //    lock (lockObject)
+        //    {
+                
+        //        Tuple<int, DataGame> obj = (Tuple<int, DataGame>)state;
+        //        int type = obj.Item1;
+        //        DataGame data = obj.Item2;
+        //        if (V == 0)
+        //        {
+        //            listBox2.Items.Add("CountDown"+ type + data);
+        //            timer.Change(Timeout.Infinite, Timeout.Infinite);
+        //            switch (type)
+        //            {
+        //                case 2: //bomb
+        //                    CheckBom(data);
+        //                    break;
+        //                case 3:
+        //                    //runningSpeedRatio = 1;
+        //                    break;
+        //                case 4:
+
+        //                    break;
+        //                case 5:
+        //                    //walking = true;
+        //                    break;
+        //                case 6:
+
+        //                    break;
+        //            }
+        //        }
+        //        else if (V > 0)
+        //        {
+        //            V -= 1;
+        //        }
+
+        //    }
+        //}
+
+
     }
 }
