@@ -45,7 +45,7 @@
             this.listBox2.Location = new System.Drawing.Point(15, 201);
             this.listBox2.Margin = new System.Windows.Forms.Padding(4);
             this.listBox2.Name = "listBox2";
-            this.listBox2.Size = new System.Drawing.Size(549, 169);
+            this.listBox2.Size = new System.Drawing.Size(730, 169);
             this.listBox2.TabIndex = 15;
             // 
             // listBox1
@@ -121,7 +121,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(577, 389);
+            this.ClientSize = new System.Drawing.Size(758, 389);
             this.Controls.Add(this.listBox2);
             this.Controls.Add(this.listBox1);
             this.Controls.Add(this.textBox2);

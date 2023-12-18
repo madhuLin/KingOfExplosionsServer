@@ -21,10 +21,9 @@ namespace KingOfExplosionsServer
     {
         public Form1()
         {
-            path = path.Substring(0, path.IndexOf("bin"));
             InitializeComponent();
         }
-        private string path = System.Environment.CurrentDirectory;
+        private string path = System.Environment.CurrentDirectory, terrain;
         TcpListener Server;             //伺服端網路監聽器(相當於電話總機)
         Socket Client;                  //給客戶用的連線物件(相當於電話分機)
         Thread Th_Svr;                  //伺服器監聽用執行緒(電話總機開放中)
@@ -32,14 +31,16 @@ namespace KingOfExplosionsServer
         Hashtable HT = new Hashtable(); //客戶名稱與通訊物件的集合(雜湊表)(key:Name, Socket)
         Dictionary<string, List<string>> hashMap = new Dictionary<string, List<string>>();
         Dictionary<string, int> map = new Dictionary<string, int>();
+        Dictionary<int, int> Protect = new Dictionary<int, int>();
         Tool toolNumber = new Tool();
         int [] heart = { 3,3,3,3};
         const int baseL = 50, N = 10;
         int[,] arr = new int[N,N];
         //Box[,] arrBox = new Box[N, N];
         int[,] arrProp = new int[N, N];
-
-        Dictionary<int, Tuple<int, int>> mapPlay = new Dictionary<int, Tuple<int, int>>();
+        List<int> die = new List<int>();
+        Tuple<int, int> [] playPosition = new Tuple<int, int>[4];
+        //Dictionary<int, Tuple<int, int>> mapPlay = new Dictionary<int, Tuple<int, int>>();
 
         private void button1_Click(object sender, EventArgs e)
         {
@@ -89,57 +90,65 @@ namespace KingOfExplosionsServer
                     int inLen = Sck.Receive(B);  //接收網路資訊(byte陣列)
                     string Msg = Encoding.Default.GetString(B, 0, inLen); //翻譯實際訊息(長度inLen)
                     //listBox2.Items.Add(Msg);
-                    string Cmd = Msg.Substring(0, 1);                     //取出命令碼 (第一個字)
-                    string Str = Msg.Substring(1);                        //取出命令碼之後的訊息
-
-                    switch (Cmd)                                          //依據命令碼執行功能
+                    string[] datas = Msg.Split('|');
+                    foreach (string tmpstr in datas)
                     {
-                        case "0":                    //有新使用者上線：新增使用者到名單中
-                            //if (listBox1.Items.IndexOf(Str) >= 0)
-                            //{
-                            //    //listBox2.Items.Add("重複:" + Str);
-                            //    byte[] R = Encoding.Default.GetBytes("R" + "使用者名稱重複");
-                            //    Sck.Send(R, 0, R.Length, SocketFlags.None);
-                            //    Th.Abort();
-                            //    break;
-                            //}
-                            HT.Add(Str, Sck);        //連線加入雜湊表，Key:使用者，Value:連線物件(Socket)
-                            listBox1.Items.Add(Str); //加入上線者名單
-                            //SendAll(OnlineList());   //將目前上線人名單回傳剛剛登入的人(包含他自己) 
-                            break;
+                        if (tmpstr == "") continue;
+                        Msg = tmpstr;
+                        string Cmd = Msg.Substring(0, 1);                     //取出命令碼 (第一個字)
+                        string Str = Msg.Substring(1);                        //取出命令碼之後的訊息
 
-                        case "9":
-                            string[] Offline = Str.Split('|');
-                            HT.Remove(Offline[0]);             //移除使用者名稱為Name的連線物件
-                            listBox1.Items.Remove(Offline[0]); //自上線者名單移除Name
-                            SendAll(OnlineList());      //將目前上線人名單回傳剛剛登入的人(不包含他自己) 
-                            if (hashMap.ContainsKey(Offline[1]))
-                            {
-                                hashMap[Offline[1]].Remove(Offline[0]);
-                                string allUser1 = "";
-                                foreach (string user in hashMap[Offline[1]])
+                        switch (Cmd)                                          //依據命令碼執行功能
+                        {
+                            case "0":  //有新使用者上線：新增使用者到名單中
+                                //if (listBox1.Items.IndexOf(Str) >= 0)
+                                //{
+                                //    //listBox2.Items.Add("重複:" + Str);
+                                //    byte[] R = Encoding.Default.GetBytes("R" + "使用者名稱重複");
+                                //    Sck.Send(R, 0, R.Length, SocketFlags.None);
+                                //    Th.Abort();
+                                //    break;
+                                //}
+                                HT.Add(Str, Sck);        //連線加入雜湊表，Key:使用者，Value:連線物件(Socket)
+                                listBox1.Items.Add(Str); //加入上線者名單
+                                SendTo("T"+ terrain, Str);
+                                //SendAll(OnlineList());   //將目前上線人名單回傳剛剛登入的人(包含他自己) 
+                                break;
+
+                            case "9":
+                                string[] Offline = Str.Split('|');
+                                HT.Remove(Offline[0]);             //移除使用者名稱為Name的連線物件
+                                listBox1.Items.Remove(Offline[0]); //自上線者名單移除Name
+                                SendAll(OnlineList());      //將目前上線人名單回傳剛剛登入的人(不包含他自己) 
+                                if (hashMap.ContainsKey(Offline[1]))
                                 {
-                                    allUser1 += user + " ";
+                                    hashMap[Offline[1]].Remove(Offline[0]);
+                                    string allUser1 = "";
+                                    foreach (string user in hashMap[Offline[1]])
+                                    {
+                                        allUser1 += user + " ";
+                                    }
+                                    SendRoom("C" + allUser1, Offline[1]);
                                 }
-                                SendRoom("C" + allUser1, Offline[1]);
-                            }
 
-                            Th.Abort();                 //結束此客戶的監聽執行緒
-                            break;
-                        case "1":                       //使用者傳送訊息給所有人
-                            SendAll(Msg);               //廣播訊息
-                            break;
+                                Th.Abort();                 //結束此客戶的監聽執行緒
+                                break;
+                            case "1":                       //使用者傳送訊息給所有人
+                                SendAll(Msg);               //廣播訊息
+                                break;
 
-                        case "J":
-                            DataGame data = JsonConvert.DeserializeObject<DataGame>(Str);
-                            GameAction(data, Str);
-                            break;
-                        default:                        //使用者傳送私密訊息
+                            case "J":
+                                DataGame data = JsonConvert.DeserializeObject<DataGame>(Str);
+                                GameAction(data, Str);
+                                break;
+                            default:                        //使用者傳送私密訊息
 
-                            //string[] C = Str.Split('|');//切開訊息與收件者
-                            //SendTo(Cmd + C[0], C[1]);   //C[0]是訊息，C[1]是收件者
-                            break;
+                                //string[] C = Str.Split('|');//切開訊息與收件者
+                                //SendTo(Cmd + C[0], C[1]);   //C[0]是訊息，C[1]是收件者
+                                break;
+                        }
                     }
+                    
                 }
                 catch (Exception)
                 {
@@ -167,19 +176,22 @@ namespace KingOfExplosionsServer
                     break;
                 case "MOVE":
                     //string json = JsonConvert.SerializeObject(data);
-                    if (canWalk(data)) SendAll("J" + json);
+                    if (canWalk(data)) {
+                        listBox2.Items.Add("MOVE: " + json);
+                        SendAll("J" + json);
+                    }
+                    
                     break;
 
             }
             
         }
 
-        int[] Probability = { 0 , 3, 3, 5, 5 };
+        int[] Probability = { 0 , 3,4,5,6,7 };
         int getProp() 
         {
             Random random = new Random();
             int num = random.Next(Probability.Length);
-            Console.WriteLine(num);
             return Probability[num];
         }
 
@@ -202,13 +214,21 @@ namespace KingOfExplosionsServer
                     DataBomb data = new DataBomb("BOMB", new Tuple<int, int>(r, c), type);
                     list.Add(data);
                 }
-                foreach (var kvp in mapPlay)
+                for (int i = 0; i < playPosition.Length; i++)
                 {
-                    var value = kvp.Value;
+                    if (playPosition[i] == null || die.Contains(i+1) || (Protect.ContainsKey(bomb.userNumber) && Protect[bomb.userNumber] == 1) ) continue;
+                    var value = playPosition[i];
                     if (value.Item1 == r && value.Item2 == c) 
                     {
-                        Attack attack = new Attack("ACTTACK", kvp.Key, heart[kvp.Key - 1]--);
-                        SendAll("H" + JsonConvert.SerializeObject(attack));
+                        Attack attack = new Attack("ACTTACK", i+1, heart[i]--);
+                        string attackStr = JsonConvert.SerializeObject(attack);
+                        SendAll("H" + attackStr);
+                        if (heart[i] <= 0) 
+                        {
+                            die.Add(i+1);
+                            SendTo("O" + attackStr, (i + 1).ToString());
+                        } 
+                        
                     }
                 }
             }
@@ -250,27 +270,33 @@ namespace KingOfExplosionsServer
                 
                 switch (type)
                 {
-                    case 3:
-                        tool.reciprocal(70);
+                    case 3: //加速
+                        tool.reciprocal(80);
                         break;
-                    case 4:
-
+                    case 4: // 保護
+                        Protect[data.UserNumber] = 1;
+                        tool.reciprocal(60);
                         break;
-                    case 5:
+                    case 5: //香蕉
                         tool.reciprocal(15);
                         break;
-                    case 6:
-
+                    case 6: //加攻
+                        tool.reciprocal(50);
                         break;
+                    case 7: //回血
+                        if (heart[data.UserNumber - 1] >= 3) heart[data.UserNumber - 1]--;
+                        data.Carry = ++heart[data.UserNumber - 1];
+                        break;
+
                 }
                 arr[r,c] = 0;
                 data.Action = "PROP";
                 data.Position = new Tuple<int, int>(r, c);
                 string json = JsonConvert.SerializeObject(data);
-                listBox2.Items.Add("PORPSOVER: "+ json);
+                //listBox2.Items.Add("PORPSOVER: "+ json);
                 SendAll("J" +  json);
             }
-            mapPlay[data.UserNumber] = new Tuple<int, int>(r, c);
+            playPosition[data.UserNumber-1] = new Tuple<int, int>(r, c);
             return true;
         }
 
@@ -295,6 +321,7 @@ namespace KingOfExplosionsServer
         {
             Tool tool = (Tool)sender;
             DataGame data = JsonConvert.DeserializeObject<DataGame>(tool.str);
+            if (data.TypeProp == 4) Protect[data.UserNumber] = 0;
             byte[] B = Encoding.Default.GetBytes("J" + tool.str+ "|");  //訊息轉譯為byte陣列
             Socket Sck = (Socket)HT[data.UserNumber.ToString()];              //取出發送對象User的通訊物件
             Sck.Send(B, 0, B.Length, SocketFlags.None); //發送訊息
@@ -320,9 +347,15 @@ namespace KingOfExplosionsServer
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            path = path.Substring(0, path.IndexOf("bin"));
             if (File.Exists(path + "Terrain.txt"))
             {
-                using (StreamReader sr = new StreamReader(path + "Terrain.txt"))
+                using (StreamReader stringReader = new StreamReader(path + "Terrain.txt"))
+                {
+                    terrain = stringReader.ReadToEnd();
+                }
+                listBox2.Items.Add(terrain);
+                using (StringReader sr = new StringReader(terrain))
                 {
                     int i = 0;
                     string line = "";
@@ -334,6 +367,13 @@ namespace KingOfExplosionsServer
 
                 }
             }
+            //for (int i = 0; i < 10; i++)
+            //{
+            //    string str = "";
+            //    for (int j = 0; j < 10; j++) str += arr[i, j];
+            //    listBox2.Items.Add(str);
+            //}
+            //listBox2.Items.Add(terrain);
 
             startServer();
         }
@@ -398,7 +438,5 @@ namespace KingOfExplosionsServer
 
         //    }
         //}
-
-
     }
 }
