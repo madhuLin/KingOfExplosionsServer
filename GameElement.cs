@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 namespace KingOfExplosionsServer
 {
+    //工具類
     public class Tool
     {
         int capacity = 100;
@@ -30,6 +31,7 @@ namespace KingOfExplosionsServer
             this.str = str;
         }
 
+        //倒數計時工具
         public void reciprocal(int t)
         {
             V = t;
@@ -58,6 +60,8 @@ namespace KingOfExplosionsServer
             Exploded?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    // 遊戲元素基類
     public class GameElement
     {
         public int X { get; set; }
@@ -68,6 +72,8 @@ namespace KingOfExplosionsServer
 
         protected string path = System.Environment.CurrentDirectory;
     }
+
+    // 炸彈類
     public class Bomb : GameElement
     {
         private int V;
@@ -77,12 +83,14 @@ namespace KingOfExplosionsServer
         public event EventHandler Exploded;
         public int numberBomb { get; set; }
         public int userNumber { get; set; }
-        public Bomb(int x, int y, int number, int userNumber)
+        public int pow { get; set; }
+        public Bomb(int x, int y, int number, int userNumber, int pow)
         {
             X = x;
             Y = y;
             numberBomb = number;
             this.userNumber = userNumber;
+            this.pow = pow;
         }
         public void reciprocal(int t)
         {

@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 
 namespace KingOfExplosionsServer
 {
-    public class Data
+    public class Data  //基礎data
     {
         public string Action { get; set; }
         public Tuple<int, int> Position { get; set; }
     }
-    public class DataGame : Data
+    public class DataGame : Data  //遊戲內用 通用型
     {
         public int UserNumber { get; set; }
         public int numberBomb { get; set; }  //炸彈編號
@@ -21,6 +21,7 @@ namespace KingOfExplosionsServer
         public int Carry { get; set; }
     }
 
+    //炸彈Data
     public class DataBomb : Data
     {
         public DataBomb(string action, Tuple<int, int> position, int type)
@@ -32,6 +33,7 @@ namespace KingOfExplosionsServer
         public int type { get; set; }
     }
 
+    //攻擊Data
     public class Attack
     {
         public string Action { get; set; }

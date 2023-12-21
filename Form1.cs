@@ -38,10 +38,9 @@ namespace KingOfExplosionsServer
         int[,] arr = new int[N,N];
         //Box[,] arrBox = new Box[N, N];
         int[,] arrProp = new int[N, N];
-        List<int> die = new List<int>();
+        List<int> dies = new List<int>();
         Tuple<int, int> [] playPosition = new Tuple<int, int>[4];
-        //Dictionary<int, Tuple<int, int>> mapPlay = new Dictionary<int, Tuple<int, int>>();
-
+        int power = 1;
         private void button1_Click(object sender, EventArgs e)
         {
             //忽略跨執行緒處理的錯誤(允許跨執行緒存取變數)
@@ -162,14 +161,11 @@ namespace KingOfExplosionsServer
         {
             switch (data.Action) 
             {
-                case "BOMB":
-                    //listBox2.Items.Add(json);
-                    //reciprocal(25, new Tuple<int, DataGame>(2, data));
-                    break;
                 case "DROP":
                     data.numberBomb = toolNumber.getNumber();
+                    //data.Carry = power;
                     json = JsonConvert.SerializeObject(data);
-                    Bomb bomb = new Bomb(data.Position.Item1, data.Position.Item2, data.numberBomb, data.UserNumber);
+                    Bomb bomb = new Bomb(data.Position.Item1, data.Position.Item2, data.numberBomb, data.UserNumber, power);
                     SendAll("J" + json);
                     bomb.reciprocal(25);
                     bomb.Exploded += CheckBom;
@@ -187,7 +183,7 @@ namespace KingOfExplosionsServer
             
         }
 
-        int[] Probability = { 0 , 3,4,5,6,7 };
+        int[] Probability = { 0 , 8,8,8,8,8 };
         int getProp() 
         {
             Random random = new Random();
@@ -195,6 +191,7 @@ namespace KingOfExplosionsServer
             return Probability[num];
         }
 
+        //處理炸彈爆炸
         private void CheckBom(object sender, EventArgs e)
         {
             Bomb bomb = (Bomb)sender;
@@ -202,53 +199,102 @@ namespace KingOfExplosionsServer
             x = (x + 20) / 50;
             y = (y + 20) / 50;
             List<DataBomb> list = new List<DataBomb>();
-            int[] dir = new int[] { 0,0, 1, 0, -1, 0 };
+            
+            //炸彈一般情況
+            int[] dir = new int[] { 0, 0, 1, 0, -1, 0 };
             for (int d = 0; d < dir.Length - 1; d++)
             {
                 int r = y + dir[d], c = x + dir[d + 1];
                 if (r < 0 || c < 0 || r >= N || c >= N) continue;
-                if (arr[r,c] == 2)
+                if (arr[r, c] == 3) //檢查是否炸到箱子
                 {
                     int type = getProp();
                     arr[r, c] = type;
                     DataBomb data = new DataBomb("BOMB", new Tuple<int, int>(r, c), type);
                     list.Add(data);
                 }
-                for (int i = 0; i < playPosition.Length; i++)
+                for (int i = 0; i < playPosition.Length; i++)  //檢查是否炸到玩家
                 {
-                    if (playPosition[i] == null || die.Contains(i+1) || (Protect.ContainsKey(bomb.userNumber) && Protect[bomb.userNumber] == 1) ) continue;
+                    if (playPosition[i] == null || dies.Contains(i + 1) || (Protect.ContainsKey(bomb.userNumber) && Protect[bomb.userNumber] == 1)) continue;
                     var value = playPosition[i];
-                    if (value.Item1 == r && value.Item2 == c) 
+                    if (value.Item1 == r && value.Item2 == c)  //炸到玩家
                     {
-                        Attack attack = new Attack("ACTTACK", i+1, heart[i]--);
+                        Attack attack = new Attack("ACTTACK", i + 1, heart[i]--);
                         string attackStr = JsonConvert.SerializeObject(attack);
                         SendAll("H" + attackStr);
                         if (heart[i] <= 0) 
                         {
-                            die.Add(i+1);
+                            dies.Add(i + 1);
                             SendTo("O" + attackStr, (i + 1).ToString());
-                        } 
-                        
+                        }
+
+                    }
+                    if (dies.Count >= hashMap.Count - 1) //只剩一玩家
+                    {
+                        string dirStr = "";
+                        foreach (var die in dies) dirStr += die + " ";
+                        dirStr += bomb.userNumber.ToString();
+                        SendAll("K" + dirStr);
+                    }
+                }
+            }
+            
+            //長度翻倍
+            if(bomb.pow == 2)
+            {
+                int[] dir2 = new int[] { 0, 1, 0, -1, 0 };
+                for (int d = 0; d < dir2.Length - 1; d++)
+                {
+                    int r = y + dir2[d] * 2, c = x + dir2[d + 1] * 2;
+                    if (r < 0 || c < 0 || r >= N || c >= N) continue;
+                    if (arr[r, c] == 3)
+                    {
+                        int type = getProp();
+                        arr[r, c] = type;
+                        DataBomb data = new DataBomb("BOMB", new Tuple<int, int>(r, c), type);
+                        list.Add(data);
+                    }
+                    for (int i = 0; i < playPosition.Length; i++)
+                    {
+                        if (playPosition[i] == null || dies.Contains(i + 1) || (Protect.ContainsKey(bomb.userNumber) && Protect[bomb.userNumber] == 1)) continue;
+                        var value = playPosition[i];
+                        if (value.Item1 == r && value.Item2 == c)
+                        {
+                            Attack attack = new Attack("ACTTACK", i + 1, heart[i]--);
+                            string attackStr = JsonConvert.SerializeObject(attack);
+                            SendAll("H" + attackStr);
+                            if (heart[i] <= 0)
+                            {
+                                dies.Add(i + 1);
+                                SendTo("O" + attackStr, (i + 1).ToString());
+                            }
+
+                        }
+                        if (dies.Count >= hashMap.Count - 1)
+                        {
+                            string dirStr = "";
+                            foreach (var die in dies) dirStr += die + " ";
+                            dirStr += bomb.userNumber.ToString();
+                            SendAll("K" + dirStr);
+                        }
                     }
                 }
             }
             string json = JsonConvert.SerializeObject(list);
             SendAll("D" + bomb.numberBomb.ToString() + " " + json);
 
-
-            //string json = JsonConvert.SerializeObject(list);
-            //SendAll("D" +dataGame.numberBomb.ToString() +"|"+ json);
         }
 
-        private bool canWalk(DataGame data)
+        //處理行走事件
+        private bool canWalk(DataGame data)  
         {
             int x = data.Position.Item1, y = data.Position.Item2;
-            int basePL = baseL-15;
+            int basePL = baseL-10;
             for (int i = y / baseL; i < Math.Min(y / baseL + 2, N); i++)
             {
                 for (int j = x / baseL; j < Math.Min(x / baseL + 2, N); j++)
                 {
-                    if (arr[i,j] == 1 || arr[i,j] == 2)
+                    if (arr[i,j] == 1 || arr[i,j] == 2 || arr[i, j] == 3)
                     {
                         int xW = j * baseL, yW = i * baseL;
                         if (x > xW && x < xW + baseL && y > yW && y < yW + baseL) return false;
@@ -259,31 +305,32 @@ namespace KingOfExplosionsServer
                 }
             }
             int r = (y + 20) / baseL, c = (x + 20) / baseL;
-            if (arr[r,c] >= 3)
+            if (arr[r,c] >= 5)  //如果遇到道具
             {
                 int type = arr[r, c];
                 data.TypeProp = type;
                 data.Action = "PORPSOVER";
                 string jsonS = JsonConvert.SerializeObject(data);
                 Tool tool = new Tool(jsonS);
-                tool.Exploded += SendProp;
+                tool.Exploded += SendProp;  //結束觸發
                 
                 switch (type)
                 {
-                    case 3: //加速
+                    case 5: //加速
                         tool.reciprocal(80);
                         break;
-                    case 4: // 保護
+                    case 6: // 保護
                         Protect[data.UserNumber] = 1;
                         tool.reciprocal(60);
                         break;
-                    case 5: //香蕉
+                    case 7: //香蕉
                         tool.reciprocal(15);
                         break;
-                    case 6: //加攻
+                    case 8: //加攻
+                        power = 2;
                         tool.reciprocal(50);
                         break;
-                    case 7: //回血
+                    case 9: //回血
                         if (heart[data.UserNumber - 1] >= 3) heart[data.UserNumber - 1]--;
                         data.Carry = ++heart[data.UserNumber - 1];
                         break;
@@ -321,7 +368,8 @@ namespace KingOfExplosionsServer
         {
             Tool tool = (Tool)sender;
             DataGame data = JsonConvert.DeserializeObject<DataGame>(tool.str);
-            if (data.TypeProp == 4) Protect[data.UserNumber] = 0;
+            if (data.TypeProp == 6) Protect[data.UserNumber] = 0;
+            else if (data.TypeProp == 8) power = 1;
             byte[] B = Encoding.Default.GetBytes("J" + tool.str+ "|");  //訊息轉譯為byte陣列
             Socket Sck = (Socket)HT[data.UserNumber.ToString()];              //取出發送對象User的通訊物件
             Sck.Send(B, 0, B.Length, SocketFlags.None); //發送訊息
@@ -389,54 +437,5 @@ namespace KingOfExplosionsServer
                 
         }
 
-        //int V;
-        //private System.Threading.Timer timer;
-        //private object lockObject = new object();
-        //private bool isSendPending = false;
-
-        //private void reciprocal(int t, Tuple<int, DataGame> obj)
-        //{
-        //    V = t;
-        //    timer = new System.Threading.Timer(CountDown, obj, 0, 100);
-        //}
-
-        //private void CountDown(object state)
-        //{
-        //    lock (lockObject)
-        //    {
-                
-        //        Tuple<int, DataGame> obj = (Tuple<int, DataGame>)state;
-        //        int type = obj.Item1;
-        //        DataGame data = obj.Item2;
-        //        if (V == 0)
-        //        {
-        //            listBox2.Items.Add("CountDown"+ type + data);
-        //            timer.Change(Timeout.Infinite, Timeout.Infinite);
-        //            switch (type)
-        //            {
-        //                case 2: //bomb
-        //                    CheckBom(data);
-        //                    break;
-        //                case 3:
-        //                    //runningSpeedRatio = 1;
-        //                    break;
-        //                case 4:
-
-        //                    break;
-        //                case 5:
-        //                    //walking = true;
-        //                    break;
-        //                case 6:
-
-        //                    break;
-        //            }
-        //        }
-        //        else if (V > 0)
-        //        {
-        //            V -= 1;
-        //        }
-
-        //    }
-        //}
     }
 }
