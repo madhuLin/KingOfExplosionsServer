@@ -29,7 +29,7 @@ namespace KingOfExplosionsServer
         Thread Th_Svr;                  //伺服器監聽用執行緒(電話總機開放中)
         Thread Th_Clt;                  //客戶用的通話執行緒(電話分機連線中)
         Hashtable HT = new Hashtable(); //客戶名稱與通訊物件的集合(雜湊表)(key:Name, Socket)
-        Dictionary<string, List<string>> hashMap = new Dictionary<string, List<string>>();
+        //Dictionary<string, List<string>> hashMap = new Dictionary<string, List<string>>();
         Dictionary<string, int> map = new Dictionary<string, int>();
         Dictionary<int, int> Protect = new Dictionary<int, int>();
         Tool toolNumber = new Tool();
@@ -88,7 +88,7 @@ namespace KingOfExplosionsServer
                     byte[] B = new byte[1023];   //建立接收資料用的陣列，長度須大於可能的訊息
                     int inLen = Sck.Receive(B);  //接收網路資訊(byte陣列)
                     string Msg = Encoding.Default.GetString(B, 0, inLen); //翻譯實際訊息(長度inLen)
-                    //listBox2.Items.Add(Msg);
+                    listBox2.Items.Add(Msg);
                     string[] datas = Msg.Split('|');
                     foreach (string tmpstr in datas)
                     {
@@ -100,14 +100,14 @@ namespace KingOfExplosionsServer
                         switch (Cmd)                                          //依據命令碼執行功能
                         {
                             case "0":  //有新使用者上線：新增使用者到名單中
-                                //if (listBox1.Items.IndexOf(Str) >= 0)
-                                //{
-                                //    //listBox2.Items.Add("重複:" + Str);
-                                //    byte[] R = Encoding.Default.GetBytes("R" + "使用者名稱重複");
-                                //    Sck.Send(R, 0, R.Length, SocketFlags.None);
-                                //    Th.Abort();
-                                //    break;
-                                //}
+                                if (listBox1.Items.IndexOf(Str) >= 0)
+                                {
+                                    listBox2.Items.Add("重複:" + Str);
+                                    //byte[] R = Encoding.Default.GetBytes("R" + "使用者名稱重複");
+                                    //Sck.Send(R, 0, R.Length, SocketFlags.None);
+                                    Th.Abort();
+                                    break;
+                                }
                                 HT.Add(Str, Sck);        //連線加入雜湊表，Key:使用者，Value:連線物件(Socket)
                                 listBox1.Items.Add(Str); //加入上線者名單
                                 SendTo("T"+ terrain, Str);
@@ -119,16 +119,16 @@ namespace KingOfExplosionsServer
                                 HT.Remove(Offline[0]);             //移除使用者名稱為Name的連線物件
                                 listBox1.Items.Remove(Offline[0]); //自上線者名單移除Name
                                 SendAll(OnlineList());      //將目前上線人名單回傳剛剛登入的人(不包含他自己) 
-                                if (hashMap.ContainsKey(Offline[1]))
-                                {
-                                    hashMap[Offline[1]].Remove(Offline[0]);
-                                    string allUser1 = "";
-                                    foreach (string user in hashMap[Offline[1]])
-                                    {
-                                        allUser1 += user + " ";
-                                    }
-                                    SendRoom("C" + allUser1, Offline[1]);
-                                }
+                                //if (hashMap.ContainsKey(Offline[1]))
+                                //{
+                                //    hashMap[Offline[1]].Remove(Offline[0]);
+                                //    string allUser1 = "";
+                                //    foreach (string user in hashMap[Offline[1]])
+                                //    {
+                                //        allUser1 += user + " ";
+                                //    }
+                                //    SendRoom("C" + allUser1, Offline[1]);
+                                //}
 
                                 Th.Abort();                 //結束此客戶的監聽執行緒
                                 break;
@@ -229,13 +229,6 @@ namespace KingOfExplosionsServer
                         }
 
                     }
-                    if (dies.Count >= hashMap.Count - 1) //只剩一玩家
-                    {
-                        string dirStr = "";
-                        foreach (var die in dies) dirStr += die + " ";
-                        dirStr += bomb.userNumber.ToString();
-                        SendAll("K" + dirStr);
-                    }
                 }
             }
             
@@ -270,18 +263,26 @@ namespace KingOfExplosionsServer
                             }
 
                         }
-                        if (dies.Count >= hashMap.Count - 1)
-                        {
-                            string dirStr = "";
-                            foreach (var die in dies) dirStr += die + " ";
-                            dirStr += bomb.userNumber.ToString();
-                            SendAll("K" + dirStr);
-                        }
                     }
                 }
             }
             string json = JsonConvert.SerializeObject(list);
             SendAll("D" + bomb.numberBomb.ToString() + " " + json);
+            if (dies.Count >= HT.Count - 1)
+            {
+                string dirStr = "";
+                foreach (var die in dies) dirStr += die.ToString() + " ";
+                foreach(string user in HT.Keys)
+                {
+                    int userNumber = int.Parse(user);
+                    if (!dies.Contains(userNumber))
+                    {
+                        dirStr += user;
+                        break;
+                    }
+                }
+                SendAll("K" + dirStr);
+            }
 
         }
 
@@ -415,15 +416,20 @@ namespace KingOfExplosionsServer
 
                 }
             }
-            //for (int i = 0; i < 10; i++)
-            //{
-            //    string str = "";
-            //    for (int j = 0; j < 10; j++) str += arr[i, j];
-            //    listBox2.Items.Add(str);
-            //}
-            //listBox2.Items.Add(terrain);
-
+            textBox1.Text = MyIP();
             startServer();
+        }
+
+        private string MyIP()
+        {
+            string hn = Dns.GetHostName();
+            IPAddress[] ip = Dns.GetHostEntry(hn).AddressList;
+            foreach (IPAddress ipAddr in ip)
+            {
+                if (ipAddr.AddressFamily == AddressFamily.InterNetwork)
+                { return ipAddr.ToString(); }
+            }
+            return "";
         }
 
         //傳送訊息給所有的線上客戶
